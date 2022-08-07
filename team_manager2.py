@@ -1,8 +1,10 @@
 import discord
 import random as rd
+import traceback
+import sys
 from discord.ext import commands
 from db_handler2 import DatabaseHandler as db2
-from token import token
+from token1 import token_tm
 from discord_slash import ButtonStyle, SlashCommand
 from discord_slash.utils.manage_components import *
 import asyncio
@@ -10,7 +12,6 @@ import asyncio
 intents = discord.Intents.default()
 intents.members = True
 
-dbh2 = db2("database_TM.db")
 db_handler = db2("database_TM.db")
 
 bot = commands.Bot(command_prefix = "*", intents = intents)
@@ -32,27 +33,25 @@ def check_manager(ctx) -> bool:
 async def on_ready():
     print("Prêt !")
 
-@bot.command()
-async def test_db2(ctx):
-    result = dbh2.get_player_infos(ctx.author.id, ctx.guild.id)
-    await ctx.send(result)
 
 @bot.command()
 async def help(ctx):
     embed = discord.Embed(title = "Aide de TeamManager", color = blanc)
     embed.add_field(name = "Présentation", value = "TeamManager est un bot de gestion des statistiques et performances des joueurs esport.\n\nSon préfixe est `*`, n'hésitez pas à contacter ViPE#3037 en cas de suggestion ou de bug ! :)")
     embed.add_field(name = "Fonctionnement", value = "Pour utiliser le bot, vous devez d'abord créer une équipe avec la commande `*setup`.\nVous pouvez ensuite ajouter des joueurs à votre équipe en faisant `*add_player <mention>.\nAprès un match d'esport, vous pouvez ajouter les résultats des joueurs et de l'équipe à l'aide des commandes ci-dessous.", inline = False)
-    
+
     embed.add_field(name = "Commandes", value = """`setup`: initialise la base de données d'une équipe
 
     `stats` (mention) : affiche les statistiques du joueur mentionné, ou les vôtres en l'absence de mention.
-    
+
     `teamstats` : affiche les statistiques de l'équipe
-    
+
     `add <mention>` : ajoute le joueur mentionné à l'équipe
-    
+
+    `remove` : permet d'enlever un joueur de l'équipe
+
     `players`: affiche la liste des joueurs de l'équipe
-    
+
     `leaderboard <critère>`: affiche un classement des joueurs selon le critère. Critères disponibles:
 
     > - `wr` -> winrate
@@ -65,7 +64,7 @@ async def help(ctx):
 @bot.command()
 # fonction de création d'équipe
 async def setup(ctx):
-    
+
     if db_handler.get_team_info(ctx.guild.id) == None:
 
         def checkMessage(message):
@@ -87,7 +86,7 @@ async def setup(ctx):
         except asyncio.TimeoutError:
             await ctx.send("Délai dépassé !")
             return
-        
+
         try:
             buttons = [
         create_button(
@@ -100,18 +99,18 @@ async def setup(ctx):
             custom_id = "2")
     ]
             action_row_buttons = create_actionrow(*buttons)
-            
+
             boutons = await ctx.send("Votre équipe a-t-elle déjà un nombre de victoires/défaites ?", components = [action_row_buttons])
 
-            
+
 
             def check1(m):
                 return m.author.id == ctx.author.id and m.origin_message.id == boutons.id
 
-            
+
             button_ctx = await wait_for_component(bot, components = action_row_buttons, check = check1, timeout = 30)
             await button_ctx.defer(ignore=True)
-            
+
             if button_ctx.custom_id == '1':
                 await ctx.send("Combien de victoires votre équipe a-t-elle ?")
                 nb_w = await bot.wait_for("message", timeout = 30, check = checkMessage)
@@ -127,10 +126,10 @@ async def setup(ctx):
         except asyncio.TimeoutError:
             await ctx.send("Délai dépassé !")
             return
-            
 
 
-            
+
+
         db_handler.setup(ctx.guild.id, team_name, role, nb_w, nb_l)
         embed = discord.Embed(title = "", description = "Équipe créée !", color = blanc)
         embed.set_footer(text = "astuce : pour ajouter des joueurs à l'équipe, faites *add <mention>")
@@ -145,10 +144,10 @@ async def leaderboard(ctx, theme: str = None):
     if db_handler.get_team_info(ctx.guild.id) != None:
         if theme == None:
             theme = "wr"
-        
+
         if theme != "wr" and theme != "w" and theme != "l" and theme != "mvp":
             await ctx.send("Cette catégorie n'existe pas :x:")
-        
+
         else:
 
             result = db_handler.get_lb(ctx.guild.id, theme)
@@ -238,6 +237,67 @@ async def add(ctx, player: discord.Member):
     else:
         await ctx.send("Ce serveur n'a pas encore d'équipe")
 
+# remove
+
+@bot.command()
+async def remove(ctx):
+    embed1 = discord.Embed(color = blanc)
+    embed1.add_field(name = "Choix du joueur", value = "Choisissez un joueur à l'aide du menu ci-dessous")
+    embed1.add_field(name = "Indications", value = "Cliquez sur `changer de joueur` pour modifier un autre joueur.\nCliquez sur `terminer` lorsque la CW est terminée.")
+
+    players = db_handler.players(ctx.guild.id)
+    liste = []
+    for i in range(1, len(players)+1):
+        p = bot.get_user(players[i-1][0])
+        liste.append(create_select_option(p.name, value = str(i)))
+    liste.append(create_select_option('Terminer', value = '0'))
+    select = create_select(
+        liste,
+        placeholder="choisis un joueur",
+        min_values=1,
+        max_values=1
+    )
+    menu = await ctx.send(embed = embed1, components=[create_actionrow(select)])
+
+    def check_menu(m):
+        return m.author.id == ctx.author.id and m.origin_message.id == menu.id
+
+    choice_ctx = await wait_for_component(bot, components=select, check=check_menu)
+    await choice_ctx.defer(ignore=True)
+    deleted = bot.get_user(players[int(choice_ctx.values[0])-1][0])
+
+
+    embed2 = discord.Embed(color = blanc)
+    embed2.add_field(name = f"Êtes-vous sûr de vouloir supprimer {deleted.name} de l'équipe ?", value = "Cette action est irréversible, et les statistiques de ce joueur avec votre équipe seront perdues")
+    buttons = [
+        create_button(
+            style = ButtonStyle.danger,
+            label = "oui",
+            custom_id = "1"),
+        create_button(
+            style = ButtonStyle.gray,
+            label = 'non',
+            custom_id = "2")
+            ]
+    action_row_buttons = create_actionrow(*buttons)
+
+    boutons = await ctx.send(embed = embed2, components = [action_row_buttons])
+
+    def check1(m):
+        return m.author.id == ctx.author.id and m.origin_message.id == boutons.id
+
+    button_ctx = await wait_for_component(bot, components = action_row_buttons, check = check1, timeout=30)
+
+    if button_ctx.custom_id == '1':
+        await menu.delete()
+        await boutons.delete()
+        await ctx.send('Joueur supprimé !')
+    elif button_ctx.custom_id == '2':
+        await menu.delete()
+        await boutons.delete()
+        await ctx.send('Commande annulée !')
+
+
 
 @bot.command()
 async def players(ctx):
@@ -246,20 +306,20 @@ async def players(ctx):
         if result == []:
             await ctx.send("Pas encore de joueurs dans l'équipe")
         else:
-        
+
             players_name = ""
             for i in range(len(result)):
                 player_id = result[i][0]
                 player = bot.get_user(player_id)
                 players_name = players_name + fleche + str(player.name) + '\n\n'
-                
+
             embed = discord.Embed(title = "Liste des joueurs", color = blanc, description = players_name)
             embed.set_footer(text = "Pour ajouter un joueur, faites la commande *add <mention>")
 
             await ctx.send(embed = embed)
     else:
         await ctx.send("Ce serveur n'a pas encore d'équipe")
-    
+
 
 
 
@@ -275,7 +335,7 @@ async def cw(ctx):
             await ctx.send("Vous n'avez pas les permissions pour faire ça")
     else:
         await ctx.send("Ce serveur n'a pas encore d'équipe")
-        
+
 
 
 async def choose_player(ctx, logs, logs_f):
@@ -297,7 +357,7 @@ async def choose_player(ctx, logs, logs_f):
         max_values=1
     )
     menu = await ctx.send(embed = embed1, components=[create_actionrow(select)])
-    
+
     def check_menu(m):
         return m.author.id == ctx.author.id and m.origin_message.id == menu.id
 
@@ -315,7 +375,7 @@ async def choose_player(ctx, logs, logs_f):
 
 
 async def edit_player(ctx, player, logs, logs_f):
-    
+
     embed2 = discord.Embed(color = blanc)
     embed2.add_field(name = f"Actions disponibles pour {player.name}", value = "Choisissez une action à l'aide des boutons ci-dessous", inline = False)
     embed2.add_field(name = f"Historique des actions pour {player.name}", value = f"{logs[0]} victoires, {logs[1]} défaites, {logs[2]} titres")
@@ -346,17 +406,17 @@ async def edit_player(ctx, player, logs, logs_f):
             custom_id= '5')
     ]
     action_row_buttons = create_actionrow(*buttons)
-    
+
     boutons = await ctx.send(embed = embed2, components = [action_row_buttons])
 
-    
+
 
     def check1(m):
         return m.author.id == ctx.author.id and m.origin_message.id == boutons.id
 
-    
+
     button_ctx = await wait_for_component(bot, components = action_row_buttons, check = check1)
-    
+
     # Victoire
     if button_ctx.custom_id == '1':
         logs[0] += 1
@@ -364,21 +424,21 @@ async def edit_player(ctx, player, logs, logs_f):
         db_handler.add_win(player.id, 1, ctx.guild.id)
         await boutons.delete()
         await edit_player(ctx, player, logs, logs_f)
-        
+
     # Défaite
     elif button_ctx.custom_id == '2':
         logs[1] += 1
         logs_f[player.id] = logs
         await boutons.delete()
         await edit_player(ctx, player, logs, logs_f)
-        
+
     # MVP
     elif button_ctx.custom_id == '3':
         logs[2] += 1
         logs_f[player.id] = logs
         await boutons.delete()
         await edit_player(ctx, player, logs, logs_f)
-       
+
 
     # Changement de joueur
     elif button_ctx.custom_id == '4':
@@ -408,13 +468,13 @@ async def end_cw(ctx, logs_f:dict):
             custom_id="3")
     ]
     action_row_buttons = create_actionrow(*buttons)
-    
+
     boutons = await ctx.send(embed = embed1, components = [action_row_buttons])
 
     def check1(m):
         return m.author.id == ctx.author.id and m.origin_message.id == boutons.id
 
-    
+
     button_ctx = await wait_for_component(bot, components = action_row_buttons, check = check1, timeout = 30)
     txt = ""
 
@@ -433,9 +493,9 @@ async def end_cw(ctx, logs_f:dict):
     elif button_ctx.custom_id == '3':
         await boutons.delete()
         txt += "**Pas de résultat**\n\n"
-    
 
-    
+
+
     for i in logs_f.items():
         p = bot.get_user(i[0])
         txt = txt + f"{p.name} : {str(i[1][0])} victoires, {str(i[1][1])} défaites, {str(i[1][2])} titres\n\n"
@@ -452,6 +512,9 @@ async def end_cw(ctx, logs_f:dict):
 """
 @bot.event
 async def on_command_error(ctx, error):
+
+    
+    
     if isinstance(error, commands.MissingRequiredArgument):
         await ctx.send("Il manque un argument :x:")
     elif isinstance(error, commands.CommandNotFound):
@@ -464,10 +527,18 @@ async def on_command_error(ctx, error):
         await ctx.send("Cet utilisateur n'existe pas :x:")
     elif isinstance(error, commands.CheckFailure):
         await ctx.send("Tu n'as pas le droit de faire ça")
-        
+
     else:
-        await ctx.send("Erreur :x:")
-"""
+        
+    l = traceback.format_exception(type(error), error, error.__traceback__)
+    msg = ""
+    for i in l:
+        msg += i
+    await ctx.send(msg)
+    """
+    
+
+
 
 # Infos:
 blanc = 0xFFFFFF
@@ -475,4 +546,4 @@ fleche = "<:fleche:965973335597002792>"
 croix = "<:non:965984947842220132>"
 check = "<:oui:965985031162052628>"
 
-bot.run(token)
+bot.run(token_tm)
