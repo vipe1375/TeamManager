@@ -38,7 +38,7 @@ async def on_ready():
 async def help(ctx):
     embed = discord.Embed(title = "Aide de TeamManager", color = blanc)
     embed.add_field(name = "Présentation", value = "TeamManager est un bot de gestion des statistiques et performances des joueurs esport.\n\nSon préfixe est `*`, n'hésitez pas à contacter ViPE#3037 en cas de suggestion ou de bug ! :)")
-    embed.add_field(name = "Fonctionnement", value = "Pour utiliser le bot, vous devez d'abord créer une équipe avec la commande `*setup`.\nVous pouvez ensuite ajouter des joueurs à votre équipe en faisant `*add_player <mention>.\nAprès un match d'esport, vous pouvez ajouter les résultats des joueurs et de l'équipe à l'aide des commandes ci-dessous.", inline = False)
+    embed.add_field(name = "Fonctionnement", value = "Pour utiliser le bot, vous devez d'abord créer une équipe avec la commande `*setup`.\nVous pouvez ensuite ajouter des joueurs à votre équipe en faisant `*add <mention>`.\nAprès un match d'esport, vous pouvez ajouter les résultats des joueurs et de l'équipe à l'aide des commandes ci-dessous.", inline = False)
 
     embed.add_field(name = "Commandes", value = """`setup`: initialise la base de données d'une équipe
 
@@ -139,7 +139,7 @@ async def setup(ctx):
 
 
 # classement des joueurs
-@bot.command()
+@bot.command(aliases = ['lb'])
 async def leaderboard(ctx, theme: str = None):
     if db_handler.get_team_info(ctx.guild.id) != None:
         if theme == None:
@@ -240,62 +240,72 @@ async def add(ctx, player: discord.Member):
 # remove
 
 @bot.command()
-async def remove(ctx):
-    embed1 = discord.Embed(color = blanc)
-    embed1.add_field(name = "Choix du joueur", value = "Choisissez un joueur à l'aide du menu ci-dessous")
-    embed1.add_field(name = "Indications", value = "Cliquez sur `changer de joueur` pour modifier un autre joueur.\nCliquez sur `terminer` lorsque la CW est terminée.")
+async def remove(ctx, user: discord.Member = None):
+    if user == None:
+        
+        embed1 = discord.Embed(color = blanc)
+        embed1.add_field(name = "Choix du joueur", value = "Choisissez un joueur à l'aide du menu ci-dessous")
+        embed1.add_field(name = "Indications", value = "Cliquez sur `changer de joueur` pour modifier un autre joueur.\nCliquez sur `terminer` lorsque la CW est terminée.")
 
-    players = db_handler.players(ctx.guild.id)
-    liste = []
-    for i in range(1, len(players)+1):
-        p = bot.get_user(players[i-1][0])
-        liste.append(create_select_option(p.name, value = str(i)))
-    liste.append(create_select_option('Terminer', value = '0'))
-    select = create_select(
-        liste,
-        placeholder="choisis un joueur",
-        min_values=1,
-        max_values=1
-    )
-    menu = await ctx.send(embed = embed1, components=[create_actionrow(select)])
+        players = db_handler.players(ctx.guild.id)
+        liste = []
+        for i in range(1, len(players)+1):
+            p = bot.get_user(players[i-1][0])
+            liste.append(create_select_option(p.name, value = str(i)))
+        liste.append(create_select_option('Terminer', value = '0'))
+        select = create_select(
+            liste,
+            placeholder="choisis un joueur",
+            min_values=1,
+            max_values=1
+        )
+        menu = await ctx.send(embed = embed1, components=[create_actionrow(select)])
 
-    def check_menu(m):
-        return m.author.id == ctx.author.id and m.origin_message.id == menu.id
+        def check_menu(m):
+            return m.author.id == ctx.author.id and m.origin_message.id == menu.id
 
-    choice_ctx = await wait_for_component(bot, components=select, check=check_menu)
-    await choice_ctx.defer(ignore=True)
-    deleted = bot.get_user(players[int(choice_ctx.values[0])-1][0])
-
-
-    embed2 = discord.Embed(color = blanc)
-    embed2.add_field(name = f"Êtes-vous sûr de vouloir supprimer {deleted.name} de l'équipe ?", value = "Cette action est irréversible, et les statistiques de ce joueur avec votre équipe seront perdues")
-    buttons = [
-        create_button(
-            style = ButtonStyle.danger,
-            label = "oui",
-            custom_id = "1"),
-        create_button(
-            style = ButtonStyle.gray,
-            label = 'non',
-            custom_id = "2")
-            ]
-    action_row_buttons = create_actionrow(*buttons)
-
-    boutons = await ctx.send(embed = embed2, components = [action_row_buttons])
-
-    def check1(m):
-        return m.author.id == ctx.author.id and m.origin_message.id == boutons.id
-
-    button_ctx = await wait_for_component(bot, components = action_row_buttons, check = check1, timeout=30)
-
-    if button_ctx.custom_id == '1':
+        choice_ctx = await wait_for_component(bot, components=select, check=check_menu)
+        await choice_ctx.defer(ignore=True)
+        deleted = bot.get_user(players[int(choice_ctx.values[0])-1][0])
         await menu.delete()
-        await boutons.delete()
-        await ctx.send('Joueur supprimé !')
-    elif button_ctx.custom_id == '2':
-        await menu.delete()
-        await boutons.delete()
-        await ctx.send('Commande annulée !')
+    
+    else:
+        deleted = user
+
+    if db_handler.is_in_team(deleted.id, ctx.guild.id):
+        embed2 = discord.Embed(color = blanc)
+        embed2.add_field(name = f"Êtes-vous sûr de vouloir supprimer {deleted.name} de l'équipe ?", value = "Cette action est irréversible, et les statistiques de ce joueur avec votre équipe seront perdues")
+        buttons = [
+            create_button(
+                style = ButtonStyle.danger,
+                label = "oui",
+                custom_id = "1"),
+            create_button(
+                style = ButtonStyle.gray,
+                label = 'non',
+                custom_id = "2")
+                ]
+        action_row_buttons = create_actionrow(*buttons)
+
+        boutons = await ctx.send(embed = embed2, components = [action_row_buttons])
+
+        def check1(m):
+            return m.author.id == ctx.author.id and m.origin_message.id == boutons.id
+
+        button_ctx = await wait_for_component(bot, components = action_row_buttons, check = check1, timeout=30)
+        await button_ctx.defer(ignore=True)
+
+
+        if button_ctx.custom_id == '1':
+            
+            await boutons.delete()
+            await ctx.send('Joueur supprimé !')
+            db_handler.remove_player(deleted.id, ctx.guild.id)
+        elif button_ctx.custom_id == '2':
+            await boutons.delete()
+            await ctx.send('Commande annulée !')
+    else:
+        await ctx.send("Ce joueur n'est pas dans l'équipe")
 
 
 
@@ -530,13 +540,8 @@ async def on_command_error(ctx, error):
 
     else:
         
-    l = traceback.format_exception(type(error), error, error.__traceback__)
-    msg = ""
-    for i in l:
-        msg += i
-    await ctx.send(msg)
-    """
-    
+        await ctx.send('Erreur')
+"""
 
 
 

@@ -77,10 +77,17 @@ class DatabaseHandler():
         self.con.commit()
         cursor.close()
 
+    def remove_player(self, player_id, guild_id):
+        cursor = self.con.cursor()
+        query = f"DELETE From Players WHERE player_id = ? AND team_id = ?;"
+        cursor.execute(query, (player_id, guild_id))
+        self.con.commit()
+        cursor.close()
+
     def get_lb(self, guild_id, theme: str):
         
         cursor = self.con.cursor()
-        team_id = self.get_team_id(guild_id)
+        team_id = guild_id
         if theme == "wr":
             query = f"SELECT player_id, winrate FROM Players WHERE team_id = {team_id} ORDER BY winrate DESC;"
         elif theme == "w":
