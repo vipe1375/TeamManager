@@ -42,6 +42,8 @@ async def help(ctx):
 
     embed.add_field(name = "Commandes", value = """`setup`: initialise la base de données d'une équipe
 
+    `match` : envoie un message de gestion de match
+
     `stats` (mention) : affiche les statistiques du joueur mentionné, ou les vôtres en l'absence de mention.
 
     `teamstats` : affiche les statistiques de l'équipe
@@ -335,7 +337,7 @@ async def players(ctx):
 
 
 @bot.command()
-async def cw(ctx):
+async def match(ctx):
     if db_handler.get_team_info(ctx.guild.id) != None:
         if check_manager(ctx):
             logs = [0, 0, 0]
