@@ -70,7 +70,7 @@ class DatabaseHandler():
         cursor.close()
         self.update_wr_t(guild_id)
 
-    def add_player(self, player_id, guild_id):
+    def add_player(self, player_id:int, guild_id:int):
         cursor = self.con.cursor()
         query = "INSERT INTO Players(player_id, team_id) VALUES (?, ?);"
         cursor.execute(query, (player_id, guild_id))

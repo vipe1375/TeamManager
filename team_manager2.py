@@ -5,18 +5,22 @@ import sys
 from discord.ext import commands
 from db_handler2 import DatabaseHandler as db2
 from token1 import token_tm
-from discord_slash import ButtonStyle, SlashCommand
-from discord_slash.utils.manage_components import *
 import asyncio
 
-intents = discord.Intents.default()
-intents.members = True
+intents = discord.Intents.all()
 
 db_handler = db2("database_TM.db")
 
-bot = commands.Bot(command_prefix = "*", intents = intents)
+class TMBot(commands.Bot):
+    def __init__(self) -> None:
+        super().__init__(command_prefix = '*', intents=intents, application_id=965686318518644756)
+
+    async def on_ready(self):
+        print('prêt')
+
+bot = TMBot()
 bot.remove_command("help")
-slash = SlashCommand(bot, sync_commands=True)
+
 
 def check_manager(ctx) -> bool:
     guild = ctx.guild
@@ -34,13 +38,15 @@ async def on_ready():
     print("Prêt !")
 
 
-@bot.command()
+@.command()
 async def help(ctx):
-    embed = discord.Embed(title = "Aide de TeamManager", color = blanc)
-    embed.add_field(name = "Présentation", value = "TeamManager est un bot de gestion des statistiques et performances des joueurs esport.\n\nSon préfixe est `*`, n'hésitez pas à contacter ViPE#3037 en cas de suggestion ou de bug ! :)")
-    embed.add_field(name = "Fonctionnement", value = "Pour utiliser le bot, vous devez d'abord créer une équipe avec la commande `*setup`.\nVous pouvez ensuite ajouter des joueurs à votre équipe en faisant `*add <mention>`.\nAprès un match d'esport, vous pouvez ajouter les résultats des joueurs et de l'équipe à l'aide des commandes ci-dessous.", inline = False)
 
-    embed.add_field(name = "Commandes", value = """`setup`: initialise la base de données d'une équipe
+    
+    e = discord.Embed(title = "Aide de TeamManager", color = blanc)
+    e.add_field(name = "Présentation", value = "TeamManager est un bot de gestion des statistiques et performances des joueurs esport.\n\nSon préfixe est `*`, n'hésitez pas à contacter ViPE#3037 en cas de suggestion ou de bug ! :)")
+    e.add_field(name = "Fonctionnement", value = "Pour utiliser le bot, vous devez d'abord créer une équipe avec la commande `*setup`.\nVous pouvez ensuite ajouter des joueurs à votre équipe en faisant `*add <mention>`.\nAprès un match d'esport, vous pouvez ajouter les résultats des joueurs et de l'équipe à l'aide des commandes ci-dessous.", inline = False)
+
+    e.add_field(name = "Commandes", value = """`setup`: initialise la base de données d'une équipe
 
     `match` : envoie un message de gestion de match
 
@@ -60,7 +66,8 @@ async def help(ctx):
     > - `w` -> nombre de victoires
     > - `l` -> nombre de défaites
     > - `mvp` -> nombre de fois élu meilleur joueur""", inline = False)
-    await ctx.send(embed = embed)
+    print(e)
+    await ctx.send(embed = e)
 
 
 @bot.command()
@@ -362,6 +369,7 @@ async def choose_player(ctx, logs, logs_f):
         p = bot.get_user(players[i-1][0])
         liste.append(create_select_option(p.name, value = str(i)))
     liste.append(create_select_option('Terminer', value = '0'))
+
     select = create_select(
         liste,
         placeholder="choisis un joueur",
@@ -515,9 +523,6 @@ async def end_cw(ctx, logs_f:dict):
     await ctx.send(embed = embed2)
 
 # ----------------| COMMANDES DES TEAMS |---------------- #
-
-
-
 
 
 
